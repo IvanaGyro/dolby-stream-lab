@@ -1,0 +1,868 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dolby Stream Lab</title>
+<meta name="description" content="Browser capability checks and stream tests for Dolby Vision (all profiles), HDR10+, and Dolby Atmos (E-AC-3 JOC), using public Apple and Dolby reference streams.">
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1.5.20/dist/hls.min.js"></script>
+<style>
+  :root {
+    --bg:#f6f6f4; --fg:#1b1b1a; --muted:#6a6a66; --panel:#ffffff; --border:#dcdcd6;
+    --accent:#2f5bd3; --on-accent:#ffffff; --ok:#137a3b; --warn:#9a6400; --bad:#b3261e;
+    --ok-bg:#e6f4ea; --warn-bg:#fdf3dc; --bad-bg:#fbe7e5; --code:#efefeb;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg:#141414; --fg:#ececea; --muted:#9b9b96; --panel:#1d1d1c; --border:#33332f;
+      --accent:#8aa8ff; --on-accent:#111111; --ok:#62d08c; --warn:#e8b54d; --bad:#ff8a80;
+      --ok-bg:#16301f; --warn-bg:#352a12; --bad-bg:#3a1a17; --code:#262624;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg:#141414; --fg:#ececea; --muted:#9b9b96; --panel:#1d1d1c; --border:#33332f;
+    --accent:#8aa8ff; --on-accent:#111111; --ok:#62d08c; --warn:#e8b54d; --bad:#ff8a80;
+    --ok-bg:#16301f; --warn-bg:#352a12; --bad-bg:#3a1a17; --code:#262624;
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.55 system-ui,-apple-system,"Segoe UI",sans-serif; }
+  main { max-width:1040px; margin:0 auto; padding:24px 16px 64px; }
+  h1 { font-size:24px; margin:0 0 4px; letter-spacing:-0.01em; }
+  h2 { font-size:18px; margin:32px 0 10px; }
+  h3 { font-size:15px; margin:18px 0 8px; }
+  h3:first-child { margin-top:0; }
+  p { margin:6px 0; }
+  p, .status { overflow-wrap:anywhere; }
+  a { color:var(--accent); }
+  .lead { color:var(--muted); margin-bottom:8px; }
+  .panel { background:var(--panel); border:1px solid var(--border); border-radius:10px; padding:14px; margin-bottom:12px; }
+  .row { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+  label.field { display:block; margin:8px 0; min-width:0; }
+  label.field > span { display:block; font-size:13px; color:var(--muted); margin-bottom:3px; }
+  select, button { font:inherit; color:inherit; background:var(--panel); border:1px solid var(--border); border-radius:7px; padding:7px 10px; }
+  select { width:100%; max-width:100%; min-width:0; }
+  button { cursor:pointer; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:var(--on-accent); }
+  button:disabled, select:disabled { opacity:.5; cursor:default; }
+  .table-wrap { overflow-x:auto; }
+  table { border-collapse:collapse; width:100%; font-size:13.5px; }
+  th, td { text-align:left; padding:6px 8px; border-bottom:1px solid var(--border); vertical-align:top; white-space:nowrap; }
+  th { font-weight:600; color:var(--muted); font-size:12.5px; }
+  td.wrap { white-space:normal; min-width:130px; }
+  code, .mono { font-family:ui-monospace,SFMono-Regular,Consolas,monospace; font-size:12.5px; }
+  code { background:var(--code); padding:1px 5px; border-radius:4px; }
+  .pill { display:inline-block; min-width:2.8em; text-align:center; padding:1px 7px; border-radius:999px; font-size:12px; font-weight:600; white-space:normal; }
+  .yes { color:var(--ok); background:var(--ok-bg); }
+  .no { color:var(--bad); background:var(--bad-bg); }
+  .warn { color:var(--warn); background:var(--warn-bg); }
+  .na { color:var(--muted); background:var(--code); }
+  .status { border-radius:8px; padding:8px 10px; margin:8px 0; font-weight:600; }
+  .status.success { color:var(--ok); background:var(--ok-bg); }
+  .status.warning { color:var(--warn); background:var(--warn-bg); }
+  .status.danger { color:var(--bad); background:var(--bad-bg); }
+  small, .muted { color:var(--muted); }
+  video { width:100%; background:#000; border-radius:10px; display:block; margin-top:12px; }
+  #log { white-space:pre-wrap; word-break:break-word; max-height:360px; overflow:auto; margin:8px 0 0; }
+  #log .ok { color:var(--ok); } #log .bad { color:var(--bad); }
+  progress { width:100%; height:10px; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .grid2 > * { min-width:0; }
+  @media (max-width:720px) { .grid2 { grid-template-columns:1fr; } }
+  footer { margin-top:40px; color:var(--muted); font-size:13px; }
+  footer ul { margin:4px 0 8px; padding-left:20px; }
+  .theme-toggle { float:right; font-size:13px; padding:4px 9px; }
+</style>
+</head>
+<body>
+<main>
+  <button class="theme-toggle" id="theme" type="button">Theme</button>
+  <h1>Dolby Stream Lab</h1>
+  <p class="lead">Check what this browser reports for Dolby Vision (every profile), HDR and Dolby Atmos, then play or download any single rendition from public Apple and Dolby reference streams.</p>
+
+  <!-- ===================== CAPABILITIES ===================== -->
+  <h2>1. Browser capability checks</h2>
+  <p class="muted">These are what the browser <em>claims</em> through <code>MediaSource.isTypeSupported()</code> and <code>navigator.mediaCapabilities.decodingInfo()</code>. A claim is not proof of correct playback; use section 2 to verify.</p>
+
+  <div class="panel">
+    <h3>Display</h3>
+    <div id="display-status"></div>
+    <div class="table-wrap"><table id="display-table"></table></div>
+  </div>
+
+  <div class="panel">
+    <h3>Dolby Vision, by profile</h3>
+    <p class="muted">Same probe as Dolby's OptiView demo (4K60, transfer function in brackets), extended to every profile and to protected playback (PlayReady SL3000, Widevine software, FairPlay). When Dolby Vision is not decoded, cross-compatible profiles fall back to a base layer, listed in the next section.</p>
+    <div class="table-wrap"><table id="dv-table"></table></div>
+  </div>
+
+  <div class="panel">
+    <h3>HDR10 / HLG / SDR video (Dolby Vision base layers)</h3>
+    <p class="muted">Plain video without Dolby Vision. Cross-compatible Dolby Vision streams play one of these when Dolby Vision itself is not decoded.</p>
+    <div class="table-wrap"><table id="base-table"></table></div>
+  </div>
+
+  <div class="panel">
+    <h3>Dolby Atmos and Dolby audio</h3>
+    <p class="muted">Same probe as Dolby's OptiView Atmos demo. Browsers cannot report whether the connected speakers or headphones are Atmos-capable.</p>
+    <div id="atmos-status"></div>
+    <div class="table-wrap"><table id="atmos-table"></table></div>
+  </div>
+
+  <!-- ===================== STREAMS ===================== -->
+  <h2>2. Stream test</h2>
+  <div class="panel">
+    <label class="field"><span>Source</span><select id="source"></select></label>
+    <div class="grid2">
+      <label class="field"><span>Video rendition</span><select id="video-sel" disabled><option>Choose a source</option></select></label>
+      <label class="field"><span>Audio rendition</span><select id="audio-sel" disabled><option>Choose a source</option></select></label>
+    </div>
+    <label class="field"><span>Declare video codec as</span><select id="declare" disabled></select></label>
+    <p class="muted" id="declare-help"></p>
+    <div class="row">
+      <button class="primary" id="play" type="button">Play</button>
+      <button id="dl-combined" type="button">Download video + audio (one file)</button>
+      <button id="dl-video" type="button">Download video only</button>
+      <button id="dl-audio" type="button">Download audio only</button>
+    </div>
+    <div id="dl-area" hidden>
+      <p id="dl-label" class="muted"></p>
+      <progress id="dl-progress" max="1" value="0"></progress>
+    </div>
+    <p class="muted">Downloads always fetch the full rendition. "Video + audio" merges both tracks into one MP4 in your browser, without re-encoding.</p>
+  </div>
+
+  <video id="video" controls playsinline></video>
+
+  <div class="panel" style="margin-top:12px">
+    <div class="row" style="justify-content:space-between">
+      <strong>Log</strong>
+      <div class="row">
+        <button id="copy-log" type="button">Copy</button>
+        <button id="clear-log" type="button">Clear</button>
+      </div>
+    </div>
+    <pre id="log" class="mono"></pre>
+    <div class="row" style="margin-top:10px">
+      <button id="internals" type="button">Copy media-internals address</button>
+      <span class="muted" id="internals-help"></span>
+    </div>
+  </div>
+
+  <footer>
+    <p><strong>References</strong></p>
+    <ul>
+      <li><a href="https://developer.apple.com/streaming/examples/">Apple HTTP Live Streaming examples</a> (stream <a href="https://devstreaming-cdn.apple.com/videos/streaming/examples/adv_dv_atmos/main.m3u8"><code>adv_dv_atmos</code></a>)</li>
+      <li><a href="https://optiview.dolby.com/docs/theoplayer/examples/streaming/dolby-vision/">Dolby OptiView: Dolby Vision example</a> and its <a href="https://ott.dolby.com/OTTEP/prod/v1_1/dovi/11/ta/clear/p8.4/60fps/hev1/hev1.m3u8">P8.4 reference stream</a></li>
+      <li><a href="https://optiview.dolby.com/docs/theoplayer/examples/streaming/dolby-atmos/">Dolby OptiView: Dolby Atmos example</a> and its <a href="https://ott.dolby.com/OTTEP/ddp/clear_cmaf/16JOC/master.m3u8">16/JOC reference stream</a></li>
+      <li><a href="https://developer.mozilla.org/en-US/docs/Web/API/Media_Capabilities_API">MDN: Media Capabilities API</a></li>
+      <li>Player: <a href="https://github.com/video-dev/hls.js">hls.js</a></li>
+    </ul>
+    <p>All media belongs to its owners and is streamed directly from their servers.</p>
+  </footer>
+</main>
+
+<script>
+'use strict';
+
+/* ------------------------------------------------------------------ */
+/* Theme toggle (per-viewer convenience)                               */
+/* ------------------------------------------------------------------ */
+(function () {
+  const root = document.documentElement;
+  try { const t = localStorage.getItem('theme'); if (t) root.dataset.theme = t; } catch (e) {}
+  document.getElementById('theme').addEventListener('click', () => {
+    const dark = root.dataset.theme ? root.dataset.theme === 'dark'
+      : matchMedia('(prefers-color-scheme: dark)').matches;
+    root.dataset.theme = dark ? 'light' : 'dark';
+    try { localStorage.setItem('theme', root.dataset.theme); } catch (e) {}
+  });
+})();
+
+/* ------------------------------------------------------------------ */
+/* Logging                                                             */
+/* ------------------------------------------------------------------ */
+const logEl = document.getElementById('log');
+function log(msg, cls) {
+  const d = document.createElement('div');
+  if (cls) d.className = cls;
+  d.textContent = '[' + new Date().toLocaleTimeString() + '] ' + msg;
+  logEl.appendChild(d);
+  logEl.scrollTop = logEl.scrollHeight;
+}
+document.getElementById('clear-log').onclick = () => { logEl.textContent = ''; };
+
+/* Browser's internal media diagnostics page. Web pages are not allowed to open these
+   addresses (or link to them), so the button copies the address for pasting. */
+const INTERNALS = (function () {
+  const ua = navigator.userAgent;
+  const brands = (navigator.userAgentData && navigator.userAgentData.brands || []).map(b => b.brand).join(' ');
+  if (/Edg\//.test(ua) || /Microsoft Edge/.test(brands)) return { url: 'edge://media-internals', name: 'Edge' };
+  if (/OPR\//.test(ua) || /Opera/.test(brands)) return { url: 'opera://media-internals', name: 'Opera' };
+  if (/Firefox\//.test(ua)) return { url: 'about:support#media', name: 'Firefox', note: 'see the Media section' };
+  if (/Chrome\/|Chromium\//.test(ua) || /Chrom/.test(brands)) return { url: 'chrome://media-internals', name: 'Chrome' };
+  if (/Safari\//.test(ua)) return { url: null, name: 'Safari' };
+  return { url: null, name: 'this browser' };
+})();
+(function () {
+  const btn = document.getElementById('internals'), help = document.getElementById('internals-help');
+  if (!INTERNALS.url) {
+    btn.hidden = true;
+    help.textContent = INTERNALS.name === 'Safari'
+      ? 'Safari has no media-internals page. Use the Web Inspector (Develop menu) instead.'
+      : 'No known media diagnostics page for this browser.';
+    return;
+  }
+  btn.textContent = `Copy ${INTERNALS.url}`;
+  help.textContent = `Paste it into a new ${INTERNALS.name} tab while playing${INTERNALS.note ? ' (' + INTERNALS.note + ')' : ''}. Browsers do not allow web pages to open this address directly.`;
+  btn.onclick = async () => {
+    let ok = false;
+    try { await navigator.clipboard.writeText(INTERNALS.url); ok = true; } catch (e) {
+      const ta = document.createElement('textarea'); ta.value = INTERNALS.url; document.body.appendChild(ta); ta.select();
+      try { ok = document.execCommand('copy'); } catch (e2) {} ta.remove();
+    }
+    btn.textContent = ok ? 'Copied' : 'Copy failed';
+    setTimeout(() => { btn.textContent = `Copy ${INTERNALS.url}`; }, 1500);
+  };
+})();
+document.getElementById('copy-log').onclick = async () => {
+  const btn = document.getElementById('copy-log');
+  const text = [...logEl.children].map(d => d.textContent).join('\n');
+  let ok = false;
+  try { await navigator.clipboard.writeText(text); ok = true; } catch (e) {
+    const ta = document.createElement('textarea'); ta.value = text; document.body.appendChild(ta); ta.select();
+    try { ok = document.execCommand('copy'); } catch (e2) {} ta.remove();
+  }
+  btn.textContent = ok ? 'Copied' : 'Copy failed';
+  setTimeout(() => { btn.textContent = 'Copy'; }, 1500);
+};
+
+function chLabel(c) { return !c ? '? ch' : c.includes('/') ? c : c + ' ch'; }
+function esc(s) { return String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
+function pill(v) {
+  if (v === true) return '<span class="pill yes">yes</span>';
+  if (v === false) return '<span class="pill no">no</span>';
+  return '<span class="pill na">' + esc(v || 'n/a') + '</span>';
+}
+
+/* ------------------------------------------------------------------ */
+/* 1. Capability checks                                                */
+/* ------------------------------------------------------------------ */
+const PLAYREADY = { keySystem: 'com.microsoft.playready.recommendation', initDataType: 'cenc', video: { robustness: '3000' } };
+const WIDEVINE  = { keySystem: 'com.widevine.alpha', initDataType: 'cenc', video: { robustness: 'SW_SECURE_DECODE' } };
+const FAIRPLAY  = { keySystem: 'com.apple.fps', initDataType: 'skd' };
+
+async function decodeVideo(contentType, transferFunction, keySys) {
+  if (!navigator.mediaCapabilities || !navigator.mediaCapabilities.decodingInfo) return 'n/a';
+  const cfg = { type: 'media-source', video: { contentType, width: 3840, height: 2160, bitrate: 20000000, framerate: 60 } };
+  if (transferFunction) cfg.video.transferFunction = transferFunction;
+  if (keySys) cfg.keySystemConfiguration = keySys;
+  try { return (await navigator.mediaCapabilities.decodingInfo(cfg)).supported; }
+  catch (e) { return 'error'; }
+}
+async function decodeAudio(contentType, channels, spatialRendering) {
+  if (!navigator.mediaCapabilities || !navigator.mediaCapabilities.decodingInfo) return 'n/a';
+  const audio = { contentType, channels: String(channels), bitrate: 768000, samplerate: 48000 };
+  if (spatialRendering !== undefined) audio.spatialRendering = spatialRendering;
+  try { return (await navigator.mediaCapabilities.decodingInfo({ type: 'media-source', audio })).supported; }
+  catch (e) { return 'error'; }
+}
+const MS = window.MediaSource || window.ManagedMediaSource;   // iOS Safari only has ManagedMediaSource
+function mse(t) { try { return !!(MS && MS.isTypeSupported(t)); } catch (e) { return false; } }
+
+function hdrDisplay() {
+  const q = s => window.matchMedia ? matchMedia(s).matches : 'n/a';
+  return { dyn: q('(dynamic-range: high)'), vdyn: q('(video-dynamic-range: high)'), p3: q('(color-gamut: p3)'), rec2020: q('(color-gamut: rec2020)') };
+}
+
+function renderDisplay() {
+  const h = hdrDisplay();
+  document.getElementById('display-table').innerHTML =
+    '<tr><th>Query</th><th>Result</th></tr>' +
+    `<tr><td><code>(dynamic-range: high)</code></td><td>${pill(h.dyn)}</td></tr>` +
+    `<tr><td><code>(video-dynamic-range: high)</code></td><td>${pill(h.vdyn)}</td></tr>` +
+    `<tr><td><code>(color-gamut: p3)</code></td><td>${pill(h.p3)}</td></tr>` +
+    `<tr><td><code>(color-gamut: rec2020)</code></td><td>${pill(h.rec2020)}</td></tr>`;
+  document.getElementById('display-status').innerHTML = h.dyn === true
+    ? '<div class="status success">HDR display detected.</div>'
+    : '<div class="status warning">No HDR display reported. HDR and Dolby Vision content will be tone-mapped to SDR (on Windows, check Settings → Display → Use HDR).</div>';
+}
+
+/* Base layers, each probed once */
+const BASES = {
+  'hevc-pq':  { name: 'HEVC Main 10, HDR10 (PQ)', codec: 'hvc1.2.4.L153.90', tf: 'pq' },
+  'hevc-hlg': { name: 'HEVC Main 10, HLG',        codec: 'hvc1.2.4.L153.90', tf: 'hlg' },
+  'hevc-sdr': { name: 'HEVC Main 10, SDR',        codec: 'hvc1.2.4.L153.90', tf: 'srgb' },
+  'avc-sdr':  { name: 'H.264 High, SDR',          codec: 'avc1.640033',      tf: 'srgb' },
+  'av1-pq':   { name: 'AV1 Main 10-bit, HDR10 (PQ)', codec: 'av01.0.13M.10.0.112.09.16.09.0', tf: 'pq' },
+  'av1-hlg':  { name: 'AV1 Main 10-bit, HLG',     codec: 'av01.0.13M.10.0.112.09.18.09.0', tf: 'hlg' },
+  'av1-sdr':  { name: 'AV1 Main 10-bit, SDR',     codec: 'av01.0.13M.10.0.110.01.01.01.0', tf: 'srgb' }
+};
+const DV_PROFILES = [
+  { p: '5',    note: 'HEVC, no compatible base', dv: ['dvh1.05.09', 'dvhe.05.09'], tf: 'pq', base: null },
+  { p: '7',    note: 'HEVC dual layer (Blu-ray), not for streaming', dv: ['dvhe.07.09'], tf: 'pq', base: 'hevc-pq' },
+  { p: '8.1',  note: 'HEVC, HDR10-compatible', dv: ['dvh1.08.09', 'dvhe.08.09'], tf: 'pq', base: 'hevc-pq' },
+  { p: '8.2',  note: 'HEVC, SDR-compatible', dv: ['dvh1.08.09'], tf: 'srgb', base: 'hevc-sdr' },
+  { p: '8.4',  note: 'HEVC, HLG-compatible', dv: ['dvh1.08.09', 'dvhe.08.09'], tf: 'hlg', base: 'hevc-hlg' },
+  { p: '9',    note: 'H.264, SDR-compatible', dv: ['dva1.09.05', 'dvav.09.05'], tf: 'srgb', base: 'avc-sdr' },
+  { p: '10',   note: 'AV1, no compatible base', dv: ['dav1.10.09'], tf: 'pq', base: null },
+  { p: '10.1', note: 'AV1, HDR10-compatible', dv: ['dav1.10.09'], tf: 'pq', base: 'av1-pq' },
+  { p: '10.2', note: 'AV1, SDR-compatible', dv: ['dav1.10.09'], tf: 'srgb', base: 'av1-sdr' },
+  { p: '10.4', note: 'AV1, HLG-compatible', dv: ['dav1.10.09'], tf: 'hlg', base: 'av1-hlg' }
+];
+
+async function renderBases() {
+  let html = '<tr><th>Base layer</th><th>Codec</th><th>Transfer</th><th>isTypeSupported</th><th>decodingInfo</th></tr>';
+  for (const b of Object.values(BASES)) {
+    const t = `video/mp4; codecs="${b.codec}"`;
+    b.mse = mse(t); b.ok = await decodeVideo(t, b.tf);
+    html += `<tr><td>${esc(b.name)}</td><td><code>${esc(b.codec)}</code></td><td>${esc(b.tf)}</td><td>${pill(b.mse)}</td><td>${pill(b.ok)}</td></tr>`;
+  }
+  document.getElementById('base-table').innerHTML = html;
+}
+
+async function renderDV() {
+  const tbl = document.getElementById('dv-table');
+  const head = '<tr><th>Profile</th><th>Dolby Vision codec</th><th>isTypeSupported</th><th>Clear</th><th>PlayReady</th><th>Widevine</th><th>FairPlay</th><th>Result</th></tr>';
+  tbl.innerHTML = head + '<tr><td colspan="8" class="muted">Running…</td></tr>';
+  const hdr = hdrDisplay().dyn === true;
+  // One row per profile; when the dvh1/dvhe variants disagree, show each separately in the cell.
+  const cell = (rows, key) => {
+    const vals = rows.map(r => r[key]);
+    if (vals.every(v => v === vals[0])) return pill(vals[0]);
+    return rows.map(r => `<small>${esc(r.c.split('.')[0])}</small> ${pill(r[key])}`).join('<br>');
+  };
+  let html = head;
+  for (const pr of DV_PROFILES) {
+    const rows = []; let dvClear = false, dvDrm = false;
+    for (const c of pr.dv) {
+      const t = `video/mp4; codecs="${c}"`;
+      const [clear, prd, wv, fp] = await Promise.all([decodeVideo(t, pr.tf), decodeVideo(t, pr.tf, PLAYREADY), decodeVideo(t, pr.tf, WIDEVINE), decodeVideo(t, pr.tf, FAIRPLAY)]);
+      if (clear === true) dvClear = true;
+      if (prd === true || wv === true || fp === true) dvDrm = true;
+      rows.push({ c, mse: mse(t), clear, prd, wv, fp });
+    }
+    const base = pr.base ? BASES[pr.base] : null;
+    const baseOk = base ? base.ok === true : false;
+    let cls, text;
+    if (dvClear && hdr) { cls = 'yes'; text = 'Dolby Vision'; }
+    else if (dvClear) { cls = 'warn'; text = 'Dolby Vision, but no HDR display'; }
+    else if (dvDrm) { cls = 'warn'; text = baseOk ? `Dolby Vision with DRM only; clear streams play ${base.name}` : 'Dolby Vision with DRM only'; }
+    else if (baseOk) { cls = 'warn'; text = `No Dolby Vision; plays as ${base.name}`; }
+    else { cls = 'no'; text = base ? 'Not playable' : 'Not playable (no base layer)'; }
+    html += '<tr>' +
+      `<td class="wrap"><strong>P${pr.p}</strong> <small>(${esc(pr.tf.toUpperCase())})</small><br><small>${esc(pr.note)}</small></td>` +
+      `<td>${rows.map(r => `<code>${esc(r.c)}</code>`).join('<br>')}</td>` +
+      `<td>${cell(rows, 'mse')}</td><td>${cell(rows, 'clear')}</td><td>${cell(rows, 'prd')}</td><td>${cell(rows, 'wv')}</td><td>${cell(rows, 'fp')}</td>` +
+      `<td class="wrap"><span class="pill ${cls}">${esc(text)}</span></td></tr>`;
+  }
+  tbl.innerHTML = html;
+}
+
+async function renderAtmos() {
+  const tests = [
+    ['Dolby Digital (ac-3), 5.1', 'audio/mp4; codecs="ac-3"', 6, undefined],
+    ['Dolby Digital Plus (ec-3), 5.1', 'audio/mp4; codecs="ec-3"', 6, undefined],
+    ['Dolby Digital Plus (ec-3), 16 ch', 'audio/mp4; codecs="ec-3"', 16, false],
+    ['Dolby Atmos (ec-3, 16 ch, spatialRendering)', 'audio/mp4; codecs="ec-3"', 16, true],
+    ['Dolby AC-4', 'audio/mp4; codecs="ac-4.02.01.03"', 6, undefined],
+    ['Dolby AC-4 IMS (spatialRendering)', 'audio/mp4; codecs="ac-4.02.01.03"', 16, true]
+  ];
+  let html = '<tr><th>Test</th><th>Content type</th><th>Channels</th><th>isTypeSupported</th><th>decodingInfo</th></tr>';
+  const res = {};
+  for (const [name, t, ch, sp] of tests) {
+    const r = await decodeAudio(t, ch, sp); res[name] = r;
+    html += `<tr><td>${esc(name)}</td><td><code>${esc(t)}</code></td><td>${ch}</td><td>${pill(mse(t))}</td><td>${pill(r)}</td></tr>`;
+  }
+  document.getElementById('atmos-table').innerHTML = html;
+  const ddp = res['Dolby Digital Plus (ec-3), 16 ch'] === true, atm = res['Dolby Atmos (ec-3, 16 ch, spatialRendering)'] === true;
+  document.getElementById('atmos-status').innerHTML = ddp && atm
+    ? '<div class="status success">Dolby Atmos is reported as supported. Whether objects are actually rendered depends on the playback path; see section 2.</div>'
+    : ddp ? '<div class="status warning">Dolby Digital Plus is supported, but not Atmos spatial rendering. Atmos streams will play as channel-based audio.</div>'
+          : '<div class="status danger">This browser cannot decode ec-3 audio.</div>';
+}
+
+/* ------------------------------------------------------------------ */
+/* 2. Sources                                                          */
+/* ------------------------------------------------------------------ */
+const APPLE = 'https://devstreaming-cdn.apple.com/videos/streaming/examples/adv_dv_atmos/main.m3u8';
+const DOLBY_DV = 'https://ott.dolby.com/OTTEP/prod/v1_1/dovi/11/ta/clear/';
+const DOLBY_ATMOS = 'https://ott.dolby.com/OTTEP/ddp/clear_cmaf/16JOC/master.m3u8';
+const DV_STREAMS = [['5', ['dvh1', 'dvhe']], ['8.1', ['hvc1', 'hev1']], ['8.4', ['hvc1', 'hev1']], ['10', ['dav1']], ['10.1', ['av01']], ['10.4', ['av01']]];
+// Every Dolby Vision reference stream shares the same audio, so they form one source.
+const DV_PARTS = [];
+for (const [p, tags] of DV_STREAMS)
+  for (const fps of ['25fps', '30fps', '60fps'])
+    for (const tag of tags)
+      DV_PARTS.push({ label: `P${p} · ${fps.replace('fps', ' fps')} · ${tag}`, short: `Dolby_P${p}_${fps}_${tag}`, url: `${DOLBY_DV}p${p}/${fps}/${tag}/${tag}.m3u8` });
+const SOURCES = [
+  { name: 'Apple adv_dv_atmos (DV P5, HDR10+, SDR, H.264; AAC, AC-3, E-AC-3 JOC)', short: 'Apple', parts: [{ url: APPLE }] },
+  { name: 'Dolby Vision reference (P5, P8.1, P8.4, P10, P10.1, P10.4; AAC)', short: 'Dolby_DV', parts: DV_PARTS },
+  { name: 'Dolby Atmos reference (H.264 + E-AC-3 16/JOC)', short: 'Dolby_16JOC', parts: [{ url: DOLBY_ATMOS }] }
+];
+
+/* ------------------------------------------------------------------ */
+/* HLS parsing                                                         */
+/* ------------------------------------------------------------------ */
+function parseAttrs(s) {
+  const o = {}; const re = /([A-Z0-9-]+)=("[^"]*"|[^,]*)/g; let m;
+  while ((m = re.exec(s))) o[m[1]] = m[2].replace(/^"|"$/g, '');
+  return o;
+}
+const AUDIO_CODEC = /^(mp4a|ec-3|ac-3|ac-4|opus|flac|alac|mhm1|mha1|dtsc|dtsx)/i;
+
+async function fetchText(url) {
+  const r = await fetch(url);
+  if (!r.ok) throw new Error(`HTTP ${r.status} for ${url}`);
+  return r.text();
+}
+
+async function parseMaster(url) {
+  const txt = await fetchText(url);
+  const lines = txt.split(/\r?\n/);
+  const audioCodecByGroup = {}; const audios = []; const vmap = new Map();
+  for (let i = 0; i < lines.length; i++) {
+    const L = lines[i].trim();
+    if (L.startsWith('#EXT-X-MEDIA:')) {
+      const a = parseAttrs(L.slice(13));
+      if (a.TYPE === 'AUDIO' && a.URI && !(a.CHARACTERISTICS || '').includes('describes-video'))
+        audios.push({ group: a['GROUP-ID'], name: a.NAME || a.LANGUAGE || 'audio', lang: a.LANGUAGE || '', channels: a.CHANNELS || '', uri: new URL(a.URI, url).href });
+    } else if (L.startsWith('#EXT-X-STREAM-INF:')) {
+      const a = parseAttrs(L.slice(18));
+      let j = i + 1; while (j < lines.length && (!lines[j].trim() || lines[j].trim().startsWith('#'))) j++;
+      if (j >= lines.length) continue;
+      const uri = new URL(lines[j].trim(), url).href;
+      const codecs = (a.CODECS || '').split(',').map(s => s.trim()).filter(Boolean);
+      const vc = codecs.find(c => !AUDIO_CODEC.test(c)) || '';
+      const ac = codecs.find(c => AUDIO_CODEC.test(c)) || '';
+      if (a.AUDIO && ac && !audioCodecByGroup[a.AUDIO]) audioCodecByGroup[a.AUDIO] = ac;
+      if (!vc || vmap.has(uri)) continue;
+      vmap.set(uri, {
+        uri, codec: vc, supp: (a['SUPPLEMENTAL-CODECS'] || '').split('/')[0] || '',
+        range: a['VIDEO-RANGE'] || 'SDR', res: a.RESOLUTION || '', fps: a['FRAME-RATE'] || '',
+        bw: +a.BANDWIDTH || 0,
+        muxedAudio: (!a.AUDIO && ac) ? ac : ''   // audio carried inside the video rendition itself
+      });
+    }
+  }
+  audios.forEach(x => x.codec = audioCodecByGroup[x.group] || '');
+  const seen = new Set();
+  return { videos: [...vmap.values()], audios: audios.filter(x => !seen.has(x.uri) && seen.add(x.uri)) };
+}
+
+function dvProfile(c) { const m = /^(dvh1|dvhe|dav1|dva1|dvav)\.(\d+)/.exec(c || ''); return m ? String(+m[2]) : null; }
+function family(c) { return /^avc/.test(c) ? 'H.264' : /^(hvc1|hev1)/.test(c) ? 'HEVC' : /^av01/.test(c) ? 'AV1' : c.split('.')[0]; }
+function rangeName(v) { return /hdr10plus/i.test(v.uri) ? 'HDR10+' : v.range === 'PQ' ? 'HDR10' : v.range; }
+function videoKind(v) {
+  const p = dvProfile(v.codec);
+  if (p) return `Dolby Vision P${p}`;
+  if (v.supp) {
+    const sub = v.range === 'HLG' ? '.4' : v.range === 'PQ' ? '.1' : '.2';
+    return `Dolby Vision P${dvProfile(v.supp)}${sub} (${family(v.codec)} ${rangeName(v)}-compatible)`;
+  }
+  return `${family(v.codec)} ${rangeName(v)}`;
+}
+function sortVideos(a) {
+  const rank = v => dvProfile(v.codec) || v.supp ? 3 : /^avc/.test(v.codec) ? 0 : v.range === 'SDR' ? 1 : 2;
+  return a.sort((x, y) => rank(x) - rank(y) || videoKind(x).localeCompare(videoKind(y)) || x.bw - y.bw);
+}
+
+/* ------------------------------------------------------------------ */
+/* UI: source → renditions (audio only from the same source)           */
+/* ------------------------------------------------------------------ */
+const srcSel = document.getElementById('source');
+const vSel = document.getElementById('video-sel');
+const aSel = document.getElementById('audio-sel');
+const decSel = document.getElementById('declare');
+let curSource = null, curVideos = [], curAudios = [];
+
+(function buildSourceSelect() {
+  srcSel.add(new Option('Choose a source…', ''));
+  SOURCES.forEach((s, i) => srcSel.add(new Option(s.name, String(i))));
+})();
+
+srcSel.addEventListener('change', async () => {
+  const s = SOURCES[+srcSel.value];
+  if (!s) return;
+  curSource = s;
+  vSel.innerHTML = '<option>Loading…</option>'; vSel.disabled = aSel.disabled = decSel.disabled = true;
+  try {
+    const results = await Promise.allSettled(s.parts.map(p => parseMaster(p.url)));
+    const videos = [], audios = [], seen = new Set();
+    results.forEach((r, k) => {
+      const part = s.parts[k];
+      if (r.status !== 'fulfilled') { log(`Could not load ${part.label || part.url}: ${r.reason && r.reason.message}`, 'bad'); return; }
+      const vs = r.value.videos.map(v => ({ ...v, group: part.label || '', short: part.short || s.short }));
+      videos.push(...(part.label ? vs.sort((x, y) => x.bw - y.bw) : sortVideos(vs)));
+      for (const a of r.value.audios) if (!seen.has(a.uri)) { seen.add(a.uri); audios.push(a); }
+    });
+    if (!videos.length) throw new Error('no renditions could be loaded');
+    curVideos = videos; curAudios = audios;
+    vSel.innerHTML = '';
+    let og = null, last = null;
+    curVideos.forEach((v, i) => {
+      const opt = new Option(`${videoKind(v)} · ${v.res}${v.fps ? ' @' + (+v.fps).toFixed(2).replace(/\.00$/, '') : ''} · ${v.codec}${v.supp ? ' + ' + v.supp : ''} · ${(v.bw / 1e6).toFixed(1)} Mbps`, String(i));
+      if (v.group) {
+        if (v.group !== last) { og = document.createElement('optgroup'); og.label = v.group; vSel.appendChild(og); last = v.group; }
+        og.appendChild(opt);
+      } else vSel.add(opt);
+    });
+    vSel.disabled = decSel.disabled = false;
+    updateRendition();
+    log(`Loaded ${s.name}: ${curVideos.length} video, ${audios.length} audio renditions`, 'ok');
+  } catch (e) {
+    vSel.innerHTML = '<option>Failed to load</option>';
+    log('Failed to load source: ' + e.message, 'bad');
+  }
+});
+
+function fillAudio(v) {
+  aSel.innerHTML = '';
+  if (v && v.muxedAudio) {
+    aSel.add(new Option(`Included in the video rendition (${v.muxedAudio})`, '-2'));
+    aSel.disabled = true; return;
+  }
+  curAudios.forEach((a, i) => aSel.add(new Option(`${a.codec || '?'} · ${chLabel(a.channels)} · ${a.name}${a.lang ? ' (' + a.lang + ')' : ''}`, String(i))));
+  aSel.disabled = false;
+  if (curAudios.length) aSel.value = '0';
+}
+
+/* Declared-codec options */
+function baseFor(dvCodec) {
+  const fam = dvCodec.split('.')[0];
+  return { dvh1: 'hvc1.2.4.L153.B0', dvhe: 'hev1.2.4.L153.B0', dav1: 'av01.0.13M.10.0.112.09.16.09.0', dva1: 'avc1.640033', dvav: 'avc1.640033' }[fam] || dvCodec;
+}
+function declareOptions(v) {
+  if (!v) return [];
+  if (v.supp) return [
+    { id: 'base', codec: v.codec, label: `Base layer, no Dolby Vision: ${v.codec} (${family(v.codec)} ${rangeName(v)}, as the manifest's CODECS)` },
+    { id: 'dv', codec: v.supp, label: `Dolby Vision: ${v.supp} (from SUPPLEMENTAL-CODECS)` }
+  ];
+  if (dvProfile(v.codec)) return [
+    { id: 'dv', codec: v.codec, label: `Dolby Vision: ${v.codec} (as the manifest)` },
+    { id: 'spoof', codec: baseFor(v.codec), label: `Disguised as plain ${family(baseFor(v.codec))}: ${baseFor(v.codec)} (test only, no Dolby Vision)` }
+  ];
+  return [{ id: 'orig', codec: v.codec, label: `${v.codec} (as the manifest)` }];
+}
+function updateRendition() {
+  const v = curVideos[+vSel.value];
+  fillAudio(v);
+  decSel.innerHTML = '';
+  declareOptions(v).forEach(o => decSel.add(new Option(o.label, o.id)));
+  updateHelp();
+}
+function updateHelp() {
+  const v = curVideos[+vSel.value]; const id = decSel.value;
+  document.getElementById('declare-help').textContent = !v ? '' :
+    id === 'base' ? 'The browser decodes only the compatible base layer. This is plain HDR10 / HLG / SDR video, not Dolby Vision.'
+    : id === 'dv' && v.supp ? 'Asks the browser for its Dolby Vision path. If Dolby Vision is not supported, playback fails instead of falling back.'
+    : id === 'dv' ? 'Dolby Vision as signaled by the stream.'
+    : id === 'spoof' ? 'Bypasses the player\'s codec check only. Chromium still detects Dolby Vision from the init segment and may refuse it. Profiles 5 and 10 have no compatible base, so if this plays at all, colors will be wrong.'
+    : '';
+}
+vSel.addEventListener('change', updateRendition);
+decSel.addEventListener('change', updateHelp);
+
+/* ------------------------------------------------------------------ */
+/* Playback                                                            */
+/* ------------------------------------------------------------------ */
+let hls = null, blobUrl = null;
+let video = document.getElementById('video');
+
+function freshVideo() {
+  const v = document.createElement('video');
+  v.id = 'video'; v.controls = true; v.playsInline = true;
+  v.disableRemotePlayback = true;   // required by ManagedMediaSource (iOS/iPadOS Safari)
+  v.addEventListener('error', () => { const e = v.error; log('Video element error: code=' + (e && e.code) + ' ' + (e && e.message), 'bad'); });
+  v.addEventListener('playing', () => log('▶ Playing', 'ok'), { once: true });
+  video.replaceWith(v); video = v;
+}
+
+function buildMaster(v, a, vcodec) {
+  const lines = ['#EXTM3U', '#EXT-X-VERSION:6', '#EXT-X-INDEPENDENT-SEGMENTS'];
+  if (a) lines.push(`#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID="aud",NAME="${a.name.replace(/"/g, '')}",DEFAULT=YES,AUTOSELECT=YES${a.channels ? `,CHANNELS="${a.channels}"` : ''},URI="${a.uri}"`);
+  const acodec = a ? a.codec : v.muxedAudio;
+  let inf = `#EXT-X-STREAM-INF:BANDWIDTH=${v.bw || 1000000},VIDEO-RANGE=${v.range},CODECS="${vcodec}${acodec ? ',' + acodec : ''}"`;
+  if (v.res) inf += `,RESOLUTION=${v.res}`;
+  if (v.fps) inf += `,FRAME-RATE=${v.fps}`;
+  if (a) inf += ',AUDIO="aud"';
+  lines.push(inf, v.uri, '');
+  return lines.join('\n');
+}
+
+function selection() {
+  const v = curVideos[+vSel.value];
+  const ai = +aSel.value; const a = ai >= 0 ? curAudios[ai] : null;
+  return { v, a };
+}
+
+document.getElementById('play').addEventListener('click', () => {
+  const { v, a } = selection();
+  if (!v) { log('Choose a source and a video rendition first', 'bad'); return; }
+  const opt = declareOptions(v).find(o => o.id === decSel.value) || declareOptions(v)[0];
+  const useHlsJs = !!(window.Hls && Hls.isSupported());
+  if (hls) { hls.destroy(); hls = null; }
+  if (blobUrl) URL.revokeObjectURL(blobUrl);
+  freshVideo();
+  if (!useHlsJs) {
+    // Fallback: the browser's native HLS player (Safari). Best effort: it may refuse a generated playlist.
+    if (!video.canPlayType('application/vnd.apple.mpegurl')) { log('Neither hls.js (MSE) nor native HLS playback is available in this browser', 'bad'); return; }
+    const master = buildMaster(v, a, opt.codec);
+    video.src = 'data:application/vnd.apple.mpegurl;base64,' + btoa(unescape(encodeURIComponent(master)));
+    log(`—— Load (native HLS): ${videoKind(v)} ${v.res} declared as ${opt.codec}` + (a ? ` + ${a.codec} ${chLabel(a.channels)}` : ''));
+    video.play().catch(() => {});
+    return;
+  }
+  blobUrl = URL.createObjectURL(new Blob([buildMaster(v, a, opt.codec)], { type: 'application/vnd.apple.mpegurl' }));
+  log(`—— Load: ${videoKind(v)} ${v.res} declared as ${opt.codec}` + (a ? ` + ${a.codec} ${chLabel(a.channels)}` : v.muxedAudio ? ` (muxed ${v.muxedAudio})` : ' (no audio)'));
+  hls = new Hls();
+  hls.on(Hls.Events.MANIFEST_PARSED, (e, d) => {
+    log('Player accepted: ' + d.levels.map(l => `${l.width}x${l.height} ${l.videoCodec}${l.audioCodec ? ' / ' + l.audioCodec : ''}`).join('; '));
+    video.play().catch(() => {});
+  });
+  hls.on(Hls.Events.AUDIO_TRACK_SWITCHED, (e, d) => { const t = hls.audioTracks[d.id]; if (t) log(`Audio track: ${t.name} ${t.attrs && t.attrs.CHANNELS || ''}`); });
+  hls.on(Hls.Events.ERROR, (e, d) => log(`Error: ${d.type} / ${d.details}${d.fatal ? ' (fatal)' : ''}${d.reason ? ' — ' + d.reason : ''}`, 'bad'));
+  hls.loadSource(blobUrl);
+  hls.attachMedia(video);
+});
+
+/* ------------------------------------------------------------------ */
+/* Download (always the full rendition)                                */
+/* ------------------------------------------------------------------ */
+async function parseMediaPlaylist(url) {
+  const txt = await fetchText(url);
+  let init = null; const segs = []; let pending = null; const lastEnd = {};
+  const range = (s, uri) => { const [len, off] = s.split('@').map(Number); const st = Number.isFinite(off) ? off : (lastEnd[uri] || 0); lastEnd[uri] = st + len; return [st, st + len - 1]; };
+  for (const raw of txt.split(/\r?\n/)) {
+    const L = raw.trim(); if (!L) continue;
+    if (L.startsWith('#EXT-X-MAP:')) { const a = parseAttrs(L.slice(11)); const uri = new URL(a.URI, url).href; init = { uri, range: a.BYTERANGE ? range(a.BYTERANGE, uri) : null }; }
+    else if (L.startsWith('#EXT-X-BYTERANGE:')) pending = L.slice(17);
+    else if (!L.startsWith('#')) { const uri = new URL(L, url).href; segs.push({ uri, range: pending ? range(pending, uri) : null }); pending = null; }
+  }
+  return { init, segs };
+}
+
+const dlArea = document.getElementById('dl-area'), dlLabel = document.getElementById('dl-label'), dlProg = document.getElementById('dl-progress');
+const dlButtons = ['dl-combined', 'dl-video', 'dl-audio'].map(id => document.getElementById(id));
+let downloading = false;
+
+async function fetchWithProgress(url, opt, onBytes) {
+  const r = await fetch(url, opt);
+  if (!r.ok) throw new Error(`HTTP ${r.status} for ${url}`);
+  if (!r.body || !r.body.getReader) { const b = new Uint8Array(await r.arrayBuffer()); onBytes(b.byteLength); return [b]; }
+  const reader = r.body.getReader(); const chunks = [];
+  for (;;) { const { done, value } = await reader.read(); if (done) break; chunks.push(value); onBytes(value.byteLength); }
+  return chunks;
+}
+
+/* Fetch one full rendition. progress(fraction, text) */
+async function fetchRendition(playlistUrl, label, progress) {
+  const { init, segs } = await parseMediaPlaylist(playlistUrl);
+  const parts = (init ? [init] : []).concat(segs);
+  if (!parts.length) throw new Error('Empty media playlist');
+  const isMp4 = !!init || /\.(mp4|m4s|m4v|m4a|cmf[va])(\?|$)/i.test(parts[0].uri);
+  let got = 0; const out = [];
+  if (new Set(parts.map(p => p.uri)).size === 1 && parts.every(p => p.range)) {
+    // One on-demand file addressed by byte ranges: fetch the whole original file.
+    const total = Math.max(...parts.map(p => p.range[1] + 1));
+    log(`${label}: ${parts[0].uri} (single file, ${(total / 1048576).toFixed(1)} MB)`);
+    out.push(...await fetchWithProgress(parts[0].uri, {}, n => { got += n; progress(Math.min(1, got / total), `${label}: ${(got / 1048576).toFixed(1)} MB`); }));
+  } else {
+    log(`${label}: ${segs.length} segments${init ? ' + init' : ''}`);
+    for (let i = 0; i < parts.length; i++) {
+      const p = parts[i];
+      const opt = p.range ? { headers: { Range: `bytes=${p.range[0]}-${p.range[1]}` } } : {};
+      out.push(...await fetchWithProgress(p.uri, opt, n => { got += n; }));
+      progress((i + 1) / parts.length, `${label}: segment ${i + 1}/${parts.length}, ${(got / 1048576).toFixed(1)} MB`);
+    }
+  }
+  return { chunks: out, bytes: got, isMp4 };
+}
+
+function saveBlob(blob, name) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 120000);
+}
+
+async function runDownload(job) {
+  if (downloading) { log('A download is already running', 'bad'); return; }
+  downloading = true; dlButtons.forEach(b => b.disabled = true);
+  dlArea.hidden = false; dlProg.value = 0;
+  try { await job((f, t) => { dlProg.value = f; dlLabel.textContent = t; }); }
+  catch (e) { log('Download failed: ' + e.message, 'bad'); }
+  finally { downloading = false; dlButtons.forEach(b => b.disabled = false); }
+}
+
+function names() {
+  const { v, a } = selection(); const s = curSource ? curSource.short : 'stream';
+  const vs = v && v.short ? v.short : s;
+  const vPart = v ? `${(v.supp || v.codec)}_${v.res}_${rangeName(v)}` : '';
+  const aPart = a ? `${a.codec || 'audio'}_${(a.channels || '').replace('/', '-')}ch` : '';
+  const clean = x => x.replace(/[^\w.+-]+/g, '_');
+  return { v, a, video: clean(`${vs}_video_${vPart}`), audio: clean(`${s}_audio_${aPart}`), combined: clean(`${vs}_${vPart}${aPart ? '+' + aPart : ''}`) };
+}
+
+document.getElementById('dl-video').onclick = () => {
+  const n = names(); if (!n.v) return log('Choose a video rendition first', 'bad');
+  runDownload(async prog => {
+    const r = await fetchRendition(n.v.uri, 'Video', prog);
+    const name = `${n.video}.${r.isMp4 ? 'mp4' : 'ts'}`;
+    saveBlob(new Blob(r.chunks, { type: r.isMp4 ? 'video/mp4' : 'video/mp2t' }), name);
+    log(`Saved ${name} (${(r.bytes / 1048576).toFixed(1)} MB)`, 'ok');
+  });
+};
+document.getElementById('dl-audio').onclick = () => {
+  const n = names(); if (!n.a) return log(n.v && n.v.muxedAudio ? 'Audio is inside the video rendition; use "Download video + audio"' : 'Choose an audio rendition first', 'bad');
+  runDownload(async prog => {
+    const r = await fetchRendition(n.a.uri, 'Audio', prog);
+    const name = `${n.audio}.${r.isMp4 ? 'mp4' : 'ts'}`;
+    saveBlob(new Blob(r.chunks, { type: r.isMp4 ? 'audio/mp4' : 'video/mp2t' }), name);
+    log(`Saved ${name} (${(r.bytes / 1048576).toFixed(1)} MB)`, 'ok');
+  });
+};
+document.getElementById('dl-combined').onclick = () => {
+  const n = names(); if (!n.v) return log('Choose a video rendition first', 'bad');
+  if (n.v.muxedAudio || !n.a) {
+    // Already one file (muxed), or no audio selected: the video rendition is the result.
+    return document.getElementById('dl-video').onclick();
+  }
+  runDownload(async prog => {
+    const rv = await fetchRendition(n.v.uri, 'Video', (f, t) => prog(f * 0.5, t));
+    const ra = await fetchRendition(n.a.uri, 'Audio', (f, t) => prog(0.5 + f * 0.5, t));
+    if (!rv.isMp4 || !ra.isMp4) throw new Error('Merging is only supported for fragmented MP4 renditions; download the tracks separately');
+    prog(1, 'Merging…');
+    const vbuf = new Uint8Array(await new Blob(rv.chunks).arrayBuffer()); rv.chunks.length = 0;
+    const abuf = new Uint8Array(await new Blob(ra.chunks).arrayBuffer()); ra.chunks.length = 0;
+    const parts = mergeFragmentedMp4(vbuf, abuf);
+    const name = `${n.combined}.mp4`;
+    saveBlob(new Blob(parts, { type: 'video/mp4' }), name);
+    log(`Saved ${name} (${(parts.reduce((s, p) => s + p.byteLength, 0) / 1048576).toFixed(1)} MB, video + audio)`, 'ok');
+  });
+};
+
+/* ------------------------------------------------------------------ */
+/* Fragmented MP4 merge (no re-encoding)                               */
+/*   - init: video file's ftyp + moov, with the audio trak/trex added  */
+/*     under a new track ID                                            */
+/*   - media: moof+mdat pairs from both files, interleaved by time     */
+/* ------------------------------------------------------------------ */
+const u32 = (b, o) => ((b[o] << 24) | (b[o + 1] << 16) | (b[o + 2] << 8) | b[o + 3]) >>> 0;
+const w32 = (b, o, v) => { b[o] = v >>> 24; b[o + 1] = (v >>> 16) & 255; b[o + 2] = (v >>> 8) & 255; b[o + 3] = v & 255; };
+const fourcc = (b, o) => String.fromCharCode(b[o], b[o + 1], b[o + 2], b[o + 3]);
+function boxes(b, start, end) {
+  const out = []; let o = start;
+  while (o + 8 <= end) {
+    let size = u32(b, o), hdr = 8;
+    if (size === 1) { size = u32(b, o + 8) * 4294967296 + u32(b, o + 12); hdr = 16; }
+    else if (size === 0) size = end - o;
+    if (size < hdr || o + size > end) break;
+    out.push({ type: fourcc(b, o + 4), start: o, size, hdr, end: o + size });
+    o += size;
+  }
+  return out;
+}
+function child(b, box, type) { return boxes(b, box.start + box.hdr, box.end).find(x => x.type === type); }
+function makeBox(type, payloadParts) {
+  const len = 8 + payloadParts.reduce((s, p) => s + p.byteLength, 0);
+  const h = new Uint8Array(8); w32(h, 0, len); for (let i = 0; i < 4; i++) h[4 + i] = type.charCodeAt(i);
+  const out = new Uint8Array(len); out.set(h, 0); let o = 8;
+  for (const p of payloadParts) { out.set(p, o); o += p.byteLength; }
+  return out;
+}
+function trackInfo(b, moov) {
+  const tracks = [];
+  for (const t of boxes(b, moov.start + 8, moov.end).filter(x => x.type === 'trak')) {
+    const tkhd = child(b, t, 'tkhd'); const v = b[tkhd.start + 8];
+    const id = u32(b, tkhd.start + (v === 1 ? 28 : 20));
+    const mdia = child(b, t, 'mdia'); const hdlr = child(b, mdia, 'hdlr'); const mdhd = child(b, mdia, 'mdhd');
+    const mv = b[mdhd.start + 8]; const ts = u32(b, mdhd.start + (mv === 1 ? 28 : 20));
+    tracks.push({ box: t, id, handler: fourcc(b, hdlr.start + 16), timescale: ts });
+  }
+  return tracks;
+}
+function fragments(b, timescales) {
+  // moof + following mdat (and nothing else); start time from the first traf's tfdt
+  const top = boxes(b, 0, b.byteLength); const out = [];
+  for (let i = 0; i < top.length; i++) {
+    if (top[i].type !== 'moof') continue;
+    const moof = top[i]; const mdat = top[i + 1] && top[i + 1].type === 'mdat' ? top[i + 1] : null;
+    let t = 0;
+    const traf = child(b, moof, 'traf');
+    if (traf) {
+      const tfhd = child(b, traf, 'tfhd'); const tfdt = child(b, traf, 'tfdt'); const id = tfhd ? u32(b, tfhd.start + 12) : 0;
+      if (tfdt) { const v = b[tfdt.start + 8]; const val = v === 1 ? u32(b, tfdt.start + 12) * 4294967296 + u32(b, tfdt.start + 16) : u32(b, tfdt.start + 12); t = val / (timescales[id] || 1); }
+    }
+    out.push({ moof, mdat, t });
+  }
+  return out;
+}
+function mergeFragmentedMp4(vb, ab) {
+  const vTop = boxes(vb, 0, vb.byteLength), aTop = boxes(ab, 0, ab.byteLength);
+  const vFtyp = vTop.find(x => x.type === 'ftyp'), vMoov = vTop.find(x => x.type === 'moov'), aMoov = aTop.find(x => x.type === 'moov');
+  if (!vMoov || !aMoov) throw new Error('Missing moov box');
+  const vTracks = trackInfo(vb, vMoov), aTracks = trackInfo(ab, aMoov);
+  const aTrack = aTracks.find(t => t.handler === 'soun') || aTracks[0];
+  if (!aTrack) throw new Error('No audio track found');
+  const newId = Math.max(0, ...vTracks.map(t => t.id)) + 1;
+
+  // Audio trak with new track ID
+  const aTrak = ab.slice(aTrack.box.start, aTrack.box.end);
+  { const tkhd = child(aTrak, { start: 0, hdr: 8, end: aTrak.byteLength }, 'tkhd'); w32(aTrak, tkhd.start + (aTrak[tkhd.start + 8] === 1 ? 28 : 20), newId); }
+  // Audio trex
+  const aMvex = child(ab, aMoov, 'mvex');
+  const aTrexBox = aMvex && boxes(ab, aMvex.start + 8, aMvex.end).find(x => x.type === 'trex' && u32(ab, x.start + 12) === aTrack.id);
+  let aTrex;
+  if (aTrexBox) { aTrex = ab.slice(aTrexBox.start, aTrexBox.end); }
+  else { aTrex = new Uint8Array(32); w32(aTrex, 0, 32); aTrex.set([116, 114, 101, 120], 4); w32(aTrex, 16, 1); }
+  w32(aTrex, 12, newId);
+
+  // New moov: video moov children, + audio trak before mvex, + audio trex in mvex
+  const moovParts = [];
+  for (const c of boxes(vb, vMoov.start + 8, vMoov.end)) {
+    if (c.type === 'mvhd') {
+      const m = vb.slice(c.start, c.end); const v = m[8];
+      w32(m, m.byteLength - 4, newId + 1);                 // next_track_ID
+      moovParts.push(m);
+      void v;
+    } else if (c.type === 'mvex') {
+      moovParts.push(aTrak);
+      const kids = boxes(vb, c.start + 8, c.end).map(k => vb.subarray(k.start, k.end));
+      moovParts.push(makeBox('mvex', [...kids, aTrex]));
+    } else moovParts.push(vb.subarray(c.start, c.end));
+  }
+  if (!child(vb, vMoov, 'mvex')) moovParts.push(aTrak, makeBox('mvex', [aTrex]));
+  const moov = makeBox('moov', moovParts);
+
+  // Fragments, audio tfhd track IDs rewritten, interleaved by start time
+  const vTs = Object.fromEntries(vTracks.map(t => [t.id, t.timescale]));
+  const aTs = Object.fromEntries(aTracks.map(t => [t.id, t.timescale]));
+  const frags = [
+    ...fragments(vb, vTs).map(f => ({ ...f, buf: vb, audio: false })),
+    ...fragments(ab, aTs).map(f => ({ ...f, buf: ab, audio: true }))
+  ].sort((x, y) => x.t - y.t || (x.audio - y.audio));
+  const out = [vb.subarray(vFtyp.start, vFtyp.end), moov];
+  let seq = 1;
+  for (const f of frags) {
+    const moof = f.buf.slice(f.moof.start, f.moof.end);
+    const root = { start: 0, hdr: 8, end: moof.byteLength };
+    const mfhd = child(moof, root, 'mfhd'); if (mfhd) w32(moof, mfhd.start + 12, seq++);
+    if (f.audio) for (const traf of boxes(moof, 8, moof.byteLength).filter(x => x.type === 'traf')) {
+      const tfhd = child(moof, traf, 'tfhd');
+      if (tfhd && u32(moof, tfhd.start + 12) === aTrack.id) w32(moof, tfhd.start + 12, newId);
+    }
+    out.push(moof);
+    if (f.mdat) out.push(f.buf.subarray(f.mdat.start, f.mdat.end));
+  }
+  return out;
+}
+
+/* ------------------------------------------------------------------ */
+/* Start                                                               */
+/* ------------------------------------------------------------------ */
+renderDisplay();
+if (window.matchMedia) matchMedia('(dynamic-range: high)').addEventListener('change', () => { renderDisplay(); renderDV(); });
+renderBases().then(renderDV).then(renderAtmos);
+</script>
+</body>
+</html>
